@@ -1,0 +1,211 @@
+<header class="topbar">
+  <h1>Document Generator</h1>
+  <nav class="tabs" aria-label="Documents">
+    <button type="button" [class.active]="view() === 'payslip'" (click)="view.set('payslip')">Payslip</button>
+    <button type="button" [class.active]="view() === 'agreement'" (click)="view.set('agreement')">Agreement</button>
+  </nav>
+  @if (view() === 'payslip') {
+    <div class="actions">
+      <button type="button" class="ghost" (click)="reset()">Reset</button>
+      <button type="button" class="primary" [disabled]="busy()" (click)="download()">
+        {{ busy() ? 'Generating…' : 'Download PDF' }}
+      </button>
+    </div>
+  } @else {
+    <div class="actions"></div>
+  }
+</header>
+
+@if (view() === 'agreement') {
+  <app-agreement />
+} @else {
+<main class="layout">
+  <form class="editor" [formGroup]="form" (submit)="$event.preventDefault()">
+    <fieldset class="target">
+      <legend>Net Pay (target)</legend>
+      <div class="inline">
+        <input
+          type="number"
+          min="0"
+          placeholder="e.g. 232848"
+          [formControl]="targetNet"
+          (keydown.enter)="applyTargetNet()"
+          aria-label="Target net pay per month"
+        />
+        <button type="button" class="primary" (click)="applyTargetNet()">Calculate</button>
+      </div>
+      @if (targetError()) { <p class="err">{{ targetError() }}</p> }
+      <p class="hint">
+        Net Pay se Basic, HRA, Special Allowance, PF aur Income Tax apne aap nikalta hai
+        (Basic 40%, HRA 50% of basic, PF 12% of basic, PT 200, tax estimate). Earnings/Deductions
+        rows replace ho jaati hain.
+      </p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Company</legend>
+      <label>Name <input formControlName="companyName" /></label>
+      <label>Address <input formControlName="companyAddress" /></label>
+      <label>Phone <input formControlName="companyPhone" /></label>
+      <div class="row">
+        <label>Month
+          <select formControlName="month">
+            @for (m of months; track $index) {
+              <option [ngValue]="$index">{{ m }}</option>
+            }
+          </select>
+        </label>
+        <label>Year
+          <select formControlName="year">
+            @for (y of years; track y) {
+              <option [ngValue]="y">{{ y }}</option>
+            }
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <div class="file">
+          <span>Logo (PNG/JPG, optional)</span>
+          <input type="file" accept="image/png,image/jpeg" (change)="onImage($event, 'logo')" />
+          @if (logo()) { <button type="button" class="link" (click)="clearImage('logo')">Remove</button> }
+        </div>
+        <div class="file">
+          <span>Signature / stamp (optional)</span>
+          <input type="file" accept="image/png,image/jpeg" (change)="onImage($event, 'signature')" />
+          @if (signature()) { <button type="button" class="link" (click)="clearImage('signature')">Remove</button> }
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Employee</legend>
+      <div class="row">
+        <label>Emp ID <input formControlName="empId" /></label>
+        <label>Emp Name <input formControlName="empName" /></label>
+      </div>
+      <div class="row">
+        <label>Designation <input formControlName="designation" /></label>
+        <label>Date of Joining <input type="date" formControlName="doj" /></label>
+      </div>
+      <div class="row">
+        <label>Business Unit <input formControlName="businessUnit" /></label>
+        <label>PAN <input formControlName="pan" /></label>
+      </div>
+      <div class="row">
+        <label>PF No. <input formControlName="pfNo" /></label>
+        <label>UAN <input formControlName="uan" /></label>
+      </div>
+      <div class="row">
+        <label>Work Days
+          <span class="inline">
+            <input type="number" min="0" formControlName="workDays" />
+            <button type="button" class="link" (click)="setWorkDaysFromMonth()">Auto</button>
+          </span>
+        </label>
+        <label>LOP Days <input type="number" min="0" formControlName="lopDays" /></label>
+      </div>
+      <div class="row">
+        <label>Bank Name <input formControlName="bankName" /></label>
+        <label>Bank A/C No <input formControlName="bankAccount" /></label>
+      </div>
+    </fieldset>
+
+    <div class="row two">
+      <fieldset formArrayName="earnings">
+        <legend>Earnings</legend>
+        @for (g of earnings.controls; track g; let i = $index) {
+          <div class="line" [formGroupName]="i">
+            <input formControlName="label" placeholder="Label" />
+            <input type="number" min="0" step="0.01" formControlName="amount" />
+            <button type="button" class="x" aria-label="Remove" (click)="remove('earnings', i)">×</button>
+          </div>
+        }
+        <button type="button" class="link" (click)="add('earnings')">+ Add earning</button>
+      </fieldset>
+
+      <fieldset formArrayName="deductions">
+        <legend>Deductions</legend>
+        @for (g of deductions.controls; track g; let i = $index) {
+          <div class="line" [formGroupName]="i">
+            <input formControlName="label" placeholder="Label" />
+            <input type="number" min="0" step="0.01" formControlName="amount" />
+            <button type="button" class="x" aria-label="Remove" (click)="remove('deductions', i)">×</button>
+          </div>
+        }
+        <button type="button" class="link" (click)="add('deductions')">+ Add deduction</button>
+      </fieldset>
+    </div>
+
+    <fieldset>
+      <legend>Footer</legend>
+      <label>Note <input formControlName="footerNote" /></label>
+    </fieldset>
+  </form>
+
+  <section class="preview-wrap" aria-label="Payslip preview">
+    <div class="slip">
+      <div class="slip-head">
+        @if (logo()) { <img class="logo" [src]="logo()" alt="Company logo" /> }
+        <div class="title">{{ title() }}</div>
+        <div class="company">
+          <div>{{ slip().companyName }}</div>
+          <div>{{ slip().companyAddress }}</div>
+          <div>{{ slip().companyPhone }}</div>
+        </div>
+      </div>
+
+      <div class="info">
+        <dl>
+          <dt>Emp ID</dt><dd>: {{ slip().empId }}</dd>
+          <dt>Emp Name</dt><dd>: {{ slip().empName }}</dd>
+          <dt>Designation</dt><dd>: {{ slip().designation }}</dd>
+          <dt>Date of Joining</dt><dd>: {{ formatDate(slip().doj) }}</dd>
+          <dt>Business Unit</dt><dd>: {{ slip().businessUnit }}</dd>
+          <dt>PAN</dt><dd>: {{ slip().pan }}</dd>
+        </dl>
+        <dl>
+          <dt>PF No.</dt><dd>: {{ slip().pfNo }}</dd>
+          <dt>Work Days</dt><dd>: {{ slip().workDays }}</dd>
+          <dt>LOP Days</dt><dd>: {{ slip().lopDays }}</dd>
+          <dt>Bank Name</dt><dd>: {{ slip().bankName }}</dd>
+          <dt>Bank A/C No</dt><dd>: {{ slip().bankAccount }}</dd>
+          <dt>UAN</dt><dd>: {{ slip().uan }}</dd>
+        </dl>
+      </div>
+
+      <table class="pay">
+        <thead>
+          <tr><th>Earnings</th><th class="amt">Amount</th><th class="sep">Deductions</th><th class="amt">Amount</th></tr>
+        </thead>
+        <tbody>
+          @for (r of rows(); track $index) {
+            <tr>
+              <td>{{ r.e?.label }}</td>
+              <td class="amt">{{ r.e ? money(r.e.amount) : '' }}</td>
+              <td class="sep">{{ r.d?.label }}</td>
+              <td class="amt">{{ r.d ? money(r.d.amount) : '' }}</td>
+            </tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <th>GROSS EARNINGS</th><th class="amt">{{ money(gross()) }}</th>
+            <th class="sep">GROSS DEDUCTIONS</th><th class="amt">{{ money(totalDed()) }}</th>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="net">
+        <dl>
+          <dt>NET PAY</dt><dd>: Rs. {{ netText() }}</dd>
+          <dt class="n">In Words</dt><dd>: {{ words() }}</dd>
+        </dl>
+        <div class="sign">
+          @if (signature()) { <img [src]="signature()" alt="Signature" /> }
+        </div>
+        <div class="foot">{{ slip().footerNote }}</div>
+      </div>
+    </div>
+  </section>
+</main>
+}

@@ -1,0 +1,159 @@
+<div class="bar">
+  <span class="note">Generic template, not legal advice. Have it reviewed before signing.</span>
+  <div class="actions">
+    <button type="button" class="ghost" (click)="reset()">Reset</button>
+    <button type="button" class="primary" [disabled]="busy()" (click)="download()">
+      {{ busy() ? 'Generating…' : 'Download PDF' }}
+    </button>
+  </div>
+</div>
+
+<main class="layout">
+  <form class="editor" [formGroup]="form" (submit)="$event.preventDefault()">
+    <fieldset>
+      <legend>Agreement</legend>
+      <label>"To" block (above subject)
+        <textarea rows="4" formControlName="addressee"></textarea>
+      </label>
+      <label>Subject (centered heading) <input formControlName="subject" /></label>
+      <p class="hint">Dono mein <code>{{ '{{variable}}' }}</code> chalte hain, jaise <code>{{ '{{consultantName}}' }}</code>.</p>
+      <div class="row">
+        <label>Date <input type="date" formControlName="date" /></label>
+        <label>Place <input formControlName="place" /></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Company (client)</legend>
+      <label>Name <input formControlName="companyName" /></label>
+      <label>Address <input formControlName="companyAddress" /></label>
+      <div class="row">
+        <label>Signatory name <input formControlName="companySignatory" /></label>
+        <label>Signatory designation <input formControlName="companySignatoryTitle" /></label>
+      </div>
+      <div class="file">
+        <span>Company logo (PNG/JPG, optional)</span>
+        <input type="file" accept="image/png,image/jpeg" (change)="onLogo($event)" />
+        @if (logo()) { <button type="button" class="link" (click)="clearLogo()">Remove logo</button> }
+      </div>
+      <label>Logo position
+        <select formControlName="logoAlign">
+          @for (p of logoAligns; track p.value) { <option [value]="p.value">{{ p.label }}</option> }
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Consultant</legend>
+      <label>Name <input formControlName="consultantName" /></label>
+      <label>Address <input formControlName="consultantAddress" /></label>
+      <label>Role / designation <input formControlName="consultantRole" /></label>
+      <label>PAN (optional) <input formControlName="consultantPan" /></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Services and term</legend>
+      <label>Description of services <textarea rows="4" formControlName="services"></textarea></label>
+      <div class="row">
+        <label>Start date <input type="date" formControlName="startDate" /></label>
+        <label>Term (months) <input type="number" min="1" formControlName="termMonths" /></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Fees</legend>
+      <div class="row">
+        <label>Fee type
+          <select formControlName="feeType">
+            @for (t of feeTypes; track t.value) { <option [value]="t.value">{{ t.label }}</option> }
+          </select>
+        </label>
+        <label>Amount (Rs.) <input type="number" min="0" step="0.01" formControlName="feeAmount" /></label>
+      </div>
+      <div class="row">
+        <label>Payment due (days) <input type="number" min="0" formControlName="paymentDays" /></label>
+        <label>GST rate (%) <input type="number" min="0" formControlName="gstRate" /></label>
+      </div>
+      <label class="check"><input type="checkbox" formControlName="gstApplicable" /> GST applicable (fees exclusive of GST)</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Other terms</legend>
+      <div class="row">
+        <label>Notice period (days) <input type="number" min="0" formControlName="noticeDays" /></label>
+        <label>Confidentiality (years) <input type="number" min="0" formControlName="confidentialityYears" /></label>
+      </div>
+      <div class="row">
+        <label>Governing law <input formControlName="governingLaw" /></label>
+        <label>Courts at (city) <input formControlName="courtCity" /></label>
+      </div>
+    </fieldset>
+
+    <fieldset class="clauses" (focusin)="trackField($event)">
+      <legend>Clauses (editable + dynamic)</legend>
+      <p class="hint">
+        Text ko jaise chaho edit karo. <code>{{ '{{variable}}' }}</code> wale hisse upar ke fields se apne aap
+        bharte hain, to fees, term ya naam badalne par clauses khud update hote hain. Kisi text box mein click karke
+        neeche ka variable dabao to wahin insert ho jayega.
+      </p>
+      <div class="chips">
+        @for (v of variables; track v.name) {
+          <button type="button" class="chip" [title]="v.hint" (mousedown)="$event.preventDefault()" (click)="insertVariable(v.name)">
+            {{ v.name }}
+          </button>
+        }
+      </div>
+
+      <label>Opening paragraph
+        <textarea rows="5" [value]="content().intro" (input)="setIntro($any($event.target).value)"></textarea>
+      </label>
+      @for (c of content().clauses; track $index; let i = $index) {
+        <div class="clause-edit">
+          <div class="clause-head">
+            <span class="cn">{{ i + 1 }}.</span>
+            <input type="text" [value]="c.title" (input)="setClause(i, { title: $any($event.target).value })" aria-label="Clause title" />
+            <button type="button" class="x" aria-label="Move up" (click)="moveClause(i, -1)" [disabled]="i === 0">↑</button>
+            <button type="button" class="x" aria-label="Move down" (click)="moveClause(i, 1)" [disabled]="i === content().clauses.length - 1">↓</button>
+            <button type="button" class="x" aria-label="Remove clause" (click)="removeClause(i)">×</button>
+          </div>
+          <textarea rows="6" [value]="c.body" (input)="setClause(i, { body: $any($event.target).value })" aria-label="Clause text"></textarea>
+        </div>
+      }
+      <button type="button" class="link" (click)="addClause()">+ Add clause</button>
+      <button type="button" class="link" (click)="resetClauses()">Reset clauses to default</button>
+    </fieldset>
+  </form>
+
+  <section class="preview-wrap" aria-label="Agreement preview">
+    <article class="paper">
+      @if (logo()) { <img class="logo" [class]="'logo ' + ag().logoAlign" [src]="logo()" alt="Company logo" /> }
+      @if (addresseeText().trim()) { <div class="addressee">{{ addresseeText() }}</div> }
+      <h2>{{ subjectText() }}</h2>
+      <p>{{ intro() }}</p>
+
+      @for (c of clauses(); track c.title; let i = $index) {
+        <h3>{{ i + 1 }}. {{ c.title.toUpperCase() }}</h3>
+        @for (p of c.paras; track $index; let j = $index) {
+          <p><span class="num">{{ i + 1 }}.{{ j + 1 }}</span> {{ p }}</p>
+        }
+      }
+
+      <p class="witness">IN WITNESS WHEREOF, the Parties have signed this Agreement on the date written at the beginning of it.</p>
+      <div class="sigs">
+        <div>
+          <strong>For {{ ag().companyName }}</strong>
+          <div class="line"></div>
+          <div>Name: {{ ag().companySignatory }}</div>
+          <div>Designation: {{ ag().companySignatoryTitle }}</div>
+          <div>Date: {{ longDate(ag().date) }}</div>
+        </div>
+        <div>
+          <strong>Consultant</strong>
+          <div class="line"></div>
+          <div>Name: {{ ag().consultantName }}</div>
+          <div>Date: {{ longDate(ag().date) }}</div>
+        </div>
+      </div>
+    </article>
+  </section>
+</main>
